@@ -15,6 +15,7 @@
     #board.disabled .cell { opacity: 0.6; }
     button, input { font-size: 1rem; padding: 6px 12px; }
     input { width: 200px; }
+    #info { margin-top: 10px; color: #333; }
   </style>
 </head>
 <body>
@@ -23,9 +24,10 @@
     <button id="createBtn">ゲーム作成</button>
     <input id="joinId" placeholder="ゲームIDを入力" />
     <button id="joinBtn">参加</button>
-    <p id="info"></p>
   </div>
+
   <div id="game" style="display:none;">
+    <p id="info"></p>
     <p>あなたの記号: <span id="symbol"></span>　現在の手番: <span id="turn"></span></p>
     <div id="board"></div>
     <p id="result"></p>
