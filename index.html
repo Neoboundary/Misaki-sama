@@ -85,7 +85,18 @@
     }
 
     createBtn.onclick = () => {
-      peer = new Peer();
+      peer = new Peer(undefined, {
+  host: '0.peerjs.com',    // PeerJS の公開サーバー（デフォルトでも動きますが、安定しない場合は自分で立てる）
+  port: 443,
+  secure: true,
+  config: {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },          // Google Public STUN
+      // { urls: 'turn:turn.example.com:3478',             // TURN が必要なら自前 or 有料サービスを指定
+      //   username: 'USERNAME', credential: 'PASSWORD' }
+    ]
+  }
+});
       peer.on('open', id => {
         symbol = 'X'; turn = 'X';
         info.textContent = 'ゲームID: ' + id + ' を相手に共有してください';
