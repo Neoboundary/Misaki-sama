@@ -6,144 +6,81 @@
   <title>リモート三目並べ</title>
   <style>
     body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
-    #setup, #game { max-width: 360px; margin: auto; }
+    #game { max-width: 360px; margin: auto; }
     #board { display: grid; grid-template-columns: repeat(3, 100px); gap: 5px; margin: 20px auto; }
     .cell { width: 100px; height: 100px; background: #fafafa; border: 1px solid #333;
             display: flex; align-items: center; justify-content: center; font-size: 2rem;
             cursor: pointer; }
     #board.disabled { pointer-events: none; }
     #board.disabled .cell { opacity: 0.6; }
-    button, input { font-size: 1rem; padding: 6px 12px; }
-    input { width: 200px; }
-    #info { margin-top: 10px; color: #333; }
+    p { font-size: 1rem; }
   </style>
 </head>
 <body>
   <h1>リモート三目並べ</h1>
-  <div id="setup">
-    <button id="createBtn">ゲーム作成</button>
-    <input id="joinId" placeholder="ゲームIDを入力" />
-    <button id="joinBtn">参加</button>
-  </div>
-
-  <div id="game" style="display:none;">
-    <p id="info"></p>
-    <p>あなたの記号: <span id="symbol"></span>　現在の手番: <span id="turn"></span></p>
+  <div id="game">
+    <p>あなたの記号: <span id="mySymbol"></span>　現在の手番: <span id="turnSymbol"></span></p>
     <div id="board"></div>
     <p id="result"></p>
   </div>
 
-  <!-- PeerJS の CDN -->
-  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
   <script>
-    let peer, conn, symbol, turn = 'X', board = Array(9).fill('');
-    const setupDiv = document.getElementById('setup');
-    const gameDiv  = document.getElementById('game');
-    const info     = document.getElementById('info');
-    const createBtn= document.getElementById('createBtn');
-    const joinBtn  = document.getElementById('joinBtn');
-    const joinId   = document.getElementById('joinId');
-    const symbolEl = document.getElementById('symbol');
-    const turnEl   = document.getElementById('turn');
-    const boardEl  = document.getElementById('board');
+    const socket = io();
+    const boardEl = document.getElementById('board');
+    const turnEl = document.getElementById('turnSymbol');
+    const symbolEl = document.getElementById('mySymbol');
     const resultEl = document.getElementById('result');
+    let mySymbol;
 
-    function renderBoard() {
+    // ページを開いたら自動で "default" ルームに参加
+    socket.emit('joinRoom', 'default');
+
+    socket.on('joined', ({ symbol, board, turn }) => {
+      mySymbol = symbol;
+      symbolEl.textContent = symbol;
+      renderBoard(board);
+      updateTurn(turn);
+    });
+
+    socket.on('startGame', ({ board, turn }) => {
+      renderBoard(board);
+      updateTurn(turn);
+    });
+
+    socket.on('update', ({ board, turn }) => {
+      renderBoard(board);
+      updateTurn(turn);
+    });
+
+    socket.on('gameOver', ({ result, board }) => {
+      renderBoard(board);
+      resultEl.textContent = result === 'draw' ? '引き分け！' : result + 'の勝利！';
+      boardEl.classList.add('disabled');
+    });
+
+    socket.on('opponentLeft', () => {
+      resultEl.textContent = '相手が退出しました。';
+    });
+
+    function renderBoard(board) {
       boardEl.innerHTML = '';
-      board.forEach((c, i) => {
+      board.forEach((cell, idx) => {
         const div = document.createElement('div');
         div.className = 'cell';
-        div.textContent = c;
+        div.textContent = cell || '';
         div.onclick = () => {
-          if (resultEl.textContent || c || symbol !== turn) return;
-          board[i] = symbol;
-          conn.send({ type:'move', idx:i });
-          updateBoard();
-          checkGame();
-          turn = symbol === 'X' ? 'O' : 'X';
-          updateTurn();
+          if (cell || resultEl.textContent || symbolEl.textContent !== turnEl.textContent) return;
+          socket.emit('makeMove', idx);
         };
         boardEl.appendChild(div);
       });
     }
-    function updateBoard() { renderBoard(); }
-    function updateTurn()  { turnEl.textContent = turn; }
-    function checkWin() {
-      const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-      for (const [a,b,c] of lines) {
-        if (board[a] && board[a]===board[b] && board[a]===board[c]) return board[a];
-      }
-      if (board.every(Boolean)) return 'draw';
-      return null;
-    }
-    function checkGame() {
-      const r = checkWin();
-      if (r) {
-        resultEl.textContent = r==='draw' ? '引き分け！' : r+'の勝利！';
-        boardEl.classList.add('disabled');
-      }
-    }
 
-    createBtn.onclick = () => {
-      peer = new Peer(undefined, {
-        host: '0.peerjs.com',
-        port: 443,
-        secure: true,
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' }
-          ]
-        }
-      });
-      peer.on('open', id => {
-        symbol = 'X'; turn = 'X';
-        info.textContent = 'ゲームID: ' + id + ' を相手に共有してください';
-        symbolEl.textContent = symbol;
-        setupDiv.style.display = 'none';
-        gameDiv.style.display = 'block';
-        renderBoard(); updateTurn();
-      });
-      peer.on('connection', c => {
-        conn = c;
-        conn.on('data', onData);
-      });
-    };
-
-    joinBtn.onclick = () => {
-      const id = joinId.value.trim();
-      if (!id) return;
-      peer = new Peer(undefined, {
-        host: '0.peerjs.com',
-        port: 443,
-        secure: true,
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' }
-          ]
-        }
-      });
-      peer.on('open', () => {
-        conn = peer.connect(id);
-        conn.on('open', () => {
-          symbol = 'O'; turn = 'X';
-          info.textContent = 'ホストに接続しました';
-          symbolEl.textContent = symbol;
-          setupDiv.style.display = 'none';
-          gameDiv.style.display = 'block';
-          renderBoard(); updateTurn();
-        });
-        conn.on('data', onData);
-      });
-    };
-
-    function onData(data) {
-      if (data.type === 'move') {
-        board[data.idx] = symbol === 'X' ? 'O' : 'X';
-        updateBoard(); checkGame();
-        turn = symbol;
-        updateTurn();
-      }
+    function updateTurn(turn) {
+      turnEl.textContent = turn;
     }
   </script>
 </body>
 </html>
+
