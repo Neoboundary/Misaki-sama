@@ -1,17 +1,17 @@
 rem 1. Node.js on
 echo [1/3] Starting Node.js server...
-start "nodeserver" cmd "node server.js"
+start "nodeserver" cmd /c "node server.js"
 timeout /t 2 >nul
 
 rem 2. ngrok on
 echo [2/3] Starting ngrok tunnel on port 3000...
 cd C:\Users\nagar\downloads\ngrok-v3
-start "ngrok" cmd "cd /d "C:\Users\nagar\Downloads\ngrok-v3" && .\ngrok http 3000"
+start "ngrok" cmd /c "cd /d "C:\Users\nagar\Downloads\ngrok-v3" && .\ngrok http 3000"
 timeout /t 2 >nul
 
 rem 3. retrieve public URL from ngrok webapi
 echo [3/3] Retrieving public URL
-start "public_url" cmd "$urldata = curl.exe -s http://127.0.0.1:4040/api/tunnels"
+start "public_url" cmd /c "$urldata = curl.exe -s http://127.0.0.1:4040/api/tunnels"
 if ($urldata -match 'https://[^"]*'){
   $public_url = $matches[0]
 }
