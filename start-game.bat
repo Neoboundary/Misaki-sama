@@ -1,22 +1,15 @@
-
-rem ────────────────────────────────────────
 rem 1. Node.js on
-rem ────────────────────────────────────────
 echo [1/3] Starting Node.js server...
-node server.js
+start "nodeserver" cmd /c "node server.js"
 timeout /t 2 >nul
 
-rem ────────────────────────────────────────
 rem 2. ngrok on
-rem ────────────────────────────────────────
 echo [2/3] Starting ngrok tunnel on port 3000...
 cd C:\Users\nagar\downloads\ngrok-v3
-.\ngrok.exe http 3000
+start "ngrok" cmd /c "cd /d "C:\Users\nagar\Downloads\ngrok-v3" && .\ngrok http 3000"
 timeout /t 2 >nul
 
-rem ────────────────────────────────────────
 rem 3. retrieve public URL from ngrok webapi
-rem ────────────────────────────────────────
 echo [3/3] Retrieving public URL...
 for /f "tokens=2 delims=: " %%A in ('curl -s http://127.0.0.1:4040/api/tunnels ^| findstr /i "https://"') do (
   set "NGROK_URL=%%A"
@@ -30,9 +23,7 @@ echo.
 echo Press any key to stop services and exit.
 pause >nul
 
-rem ────────────────────────────────────────
 rem 4. stop local server and ngrok
-rem ────────────────────────────────────────
 echo Stopping services...
 taskkill /FI "WINDOWTITLE eq NodeServer*" /T /F >nul 2>&1
 taskkill /FI "WINDOWTITLE eq ngrok*"     /T /F >nul 2>&1
