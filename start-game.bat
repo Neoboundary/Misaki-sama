@@ -28,7 +28,7 @@ pause >nul
 
 rem 4. stop local server and ngrok
 echo Stopping services...
-taskkill /FI "WINDOWTITLE eq NodeServer*" /T /F >nul 2>&1
-taskkill /FI "WINDOWTITLE eq ngrok*"     /T /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq nodeserver" /T /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq ngrok"      /T /F >nul 2>&1
 
 echo Done.
