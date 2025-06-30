@@ -10,14 +10,16 @@ start "ngrok" cmd /c "cd /d "C:\Users\nagar\Downloads\ngrok-v3" && .\ngrok http 
 timeout /t 2 >nul
 
 rem 3. retrieve public URL from ngrok webapi
-echo [3/3] Retrieving public URL...
-for /f "tokens=2 delims=: " %%A in ('curl.exe -s http://127.0.0.1:4040/api/tunnels ^| findstr /i "https://"') do (
-  set "NGROK_URL=%%A"
-)
+echo [3/3] Retrieving public URL
+start "public_url" cmd /c "$urldata = curl.exe -s http://127.0.0.1:4040/api/tunnels"
+if ($urldata -match 'https://[^"]*'){
+  $public_url = $matches[0]
+}
+
 rem copy to clipboard
-powershell -NoProfile -Command "Set-Clipboard '%NGROK_URL%'"
+powershell -NoProfile -Command "Set-Clipboard '$public_url'"
 echo Public URL copied to clipboard:
-echo    %NGROK_URL%
+echo $public_url
 
 echo.
 echo Press any key to stop services and exit.
