@@ -7,13 +7,13 @@ timeout /t 2 >nul
 
 rem 2. ngrok on
 echo [2/3] Starting ngrok tunnel on port 3000...
-start "ngrok" cmd /c "cd /d "C:\Users\nagar\Downloads\ngrok-v3" && .\ngrok http 3000"
+start "ngrok" cmd /c "cd /d C:\Users\nagar\Downloads\ngrok-v3 && .\ngrok http 3000"
 timeout /t 2 >nul
 
 rem 3. retrieve public URL from ngrok webapi
-echo [3/3] Retrieving public URL
+echo [3/3] Retrieving public URL...
 
-for /f "usebackq delims=" %%A in (`powershell -Command "curl.exe -s http://127.0.0.1:4040/api/tunnels | ForEach-Object { if (\$_ -match 'https://[^\""]*') { Write-Output \$matches[0] } }"`) do (
+for /f "usebackq delims=" %%A in (`powershell -Command "(Invoke-RestMethod -Uri 'http://127.0.0.1:4040/api/tunnels').tunnels | ForEach-Object { $_.public_url } | Select-Object -First 1"`) do (
     set "url=%%A"
 )
 
