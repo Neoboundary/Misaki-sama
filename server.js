@@ -37,8 +37,17 @@ io.on('connection', socket => {
   }
   const room = rooms[roomCode];
   
-  // 初回接続時に現在の盤面を送る
-  socket.emit('joined', { symbol: null, board: room.board, turn: room.turn });
+   // 参加プレイヤー数をカウントして symbol を決定
+  room.players = room.players || [];
+  const symbol = room.players.length === 0 ? 'X' : 'O';
+  room.players.push(socket.id);
+
+  // 初回接続時にクライアントへ現在の盤面と手番・自分の記号を送信
+  socket.emit('joined', {
+    symbol,           // ← ここが null → 'X' or 'O' になります
+    board: room.board,
+    turn: room.turn
+  });
   
   socket.on('makeMove', idx => {
     if (room.gameOver || room.board[idx]) return;
