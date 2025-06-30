@@ -1,4 +1,3 @@
-@echo off
 setlocal enabledelayedexpansion
 
 rem 1. Node.js on
