@@ -11,7 +11,7 @@ timeout /t 2 >nul
 
 rem 3. retrieve public URL from ngrok webapi
 echo [3/3] Retrieving public URL...
-for /f "tokens=2 delims=: " %%A in ('curl -s http://127.0.0.1:4040/api/tunnels ^| findstr /i "https://"') do (
+for /f "tokens=2 delims=: " %%A in ('curl.exe -s http://127.0.0.1:4040/api/tunnels ^| findstr /i "https://"') do (
   set "NGROK_URL=%%A"
 )
 rem copy to clipboard
