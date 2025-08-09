@@ -3,84 +3,209 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>リモート三目並べ</title>
+  <title>お絵描き当てゲーム</title>
   <style>
-    body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
-    #game { max-width: 360px; margin: auto; }
-    #board { display: grid; grid-template-columns: repeat(3, 100px); gap: 5px; margin: 20px auto; }
-    .cell { width: 100px; height: 100px; background: #fafafa; border: 1px solid #333;
-            display: flex; align-items: center; justify-content: center; font-size: 2rem;
-            cursor: pointer; }
-    #board.disabled { pointer-events: none; }
-    #board.disabled .cell { opacity: 0.6; }
-    p { font-size: 1rem; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; text-align: center; }
+    #wrap { max-width: 720px; margin: 0 auto; }
+    #top { display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; }
+    #status { font-weight: 600; }
+    #timer { font-variant-numeric: tabular-nums; }
+    #canvasWrap { margin: 16px auto; }
+    canvas { background: #fff; border: 1px solid #333; border-radius: 8px; touch-action: none; }
+    #controls { display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
+    #wordHint { font-size: 1.1rem; }
+    #chat { max-height: 160px; overflow: auto; text-align: left; padding: 8px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa; }
+    #chat p { margin: 4px 0; }
+    button { padding: 8px 12px; border-radius: 10px; border: 1px solid #333; background: #f5f5f5; cursor: pointer; }
+    input[type="text"] { padding: 8px 10px; border-radius: 10px; border: 1px solid #333; width: 100%; max-width: 360px; }
+    .muted { opacity: 0.6; }
   </style>
 </head>
 <body>
-  <h1>リモート三目並べ</h1>
-  <div id="game">
-    <p>あなたの記号: <span id="mySymbol"></span>　現在の手番: <span id="turnSymbol"></span></p>
-    <div id="board"></div>
-    <p id="result"></p>
+  <div id="wrap">
+    <h1>お絵描き当てゲーム</h1>
+    <div id="top">
+      <div id="status">接続中…</div>
+      <div>あなたの役割: <strong id="role">-</strong></div>
+      <div>残り時間: <span id="timer">--</span></div>
+      <button id="startBtn">ラウンド開始</button>
+      <button id="clearBtn">キャンバス消去</button>
+    </div>
+
+    <div id="canvasWrap">
+      <canvas id="board" width="600" height="400"></canvas>
+      <div id="wordHint" class="muted"></div>
+    </div>
+
+    <div id="controls">
+      <input id="guessInput" type="text" placeholder="答えを入力して Enter">
+    </div>
+
+    <div id="chat"></div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-    const boardEl = document.getElementById('board');
-    const turnEl = document.getElementById('turnSymbol');
-    const symbolEl = document.getElementById('mySymbol');
-    const resultEl = document.getElementById('result');
-    let mySymbol;
+    const board = document.getElementById('board');
+    const ctx = board.getContext('2d');
+    const roleEl = document.getElementById('role');
+    const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const timerEl = document.getElementById('timer');
+    const hintEl = document.getElementById('wordHint');
+    const guessInput = document.getElementById('guessInput');
+    const chat = document.getElementById('chat');
 
-    // ページを開いたら自動で "default" ルームに参加
+    let mySymbol = null;           // 'drawer' | 'guesser' | null(観戦)
+    let drawing = false;
+    let last = null;
+    let canDraw = false;
+    let canGuess = false;
+    let timerRemain = null;
+    let timerTick = null;
+
+    function log(msg) {
+      const p = document.createElement('p');
+      p.textContent = msg;
+      chat.appendChild(p);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function resizeCanvasForHiDPI() {
+      const ratio = window.devicePixelRatio || 1;
+      const w = board.width, h = board.height;
+      board.width = w * ratio; board.height = h * ratio;
+      board.style.width = w + 'px'; board.style.height = h + 'px';
+      ctx.scale(ratio, ratio);
+    }
+    resizeCanvasForHiDPI();
+
+    function setRole(r) {
+      mySymbol = r;
+      roleEl.textContent = r || '-';
+      if (r === 'drawer') {
+        hintEl.classList.remove('muted');
+      } else {
+        hintEl.classList.add('muted');
+      }
+      updateInteractivity();
+    }
+
+    function updateInteractivity() {
+      canDraw = mySymbol === 'drawer';
+      canGuess = mySymbol === 'guesser';
+      board.classList.toggle('muted', !canDraw);
+      guessInput.disabled = !canGuess;
+      startBtn.disabled = false;     // 両者合意なしのシンプル版。必要ならサーバ側で制御可
+      clearBtn.disabled = !canDraw;
+    }
+
+    function clearCanvas(localOnly=false) {
+      ctx.clearRect(0, 0, 600, 400);
+      if (!localOnly) socket.emit('clear');
+    }
+
+    board.addEventListener('pointerdown', e => {
+      if (!canDraw) return;
+      drawing = true;
+      const rect = board.getBoundingClientRect();
+      last = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    });
+    board.addEventListener('pointermove', e => {
+      if (!drawing || !canDraw) return;
+      const rect = board.getBoundingClientRect();
+      const pt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y);
+      ctx.lineTo(pt.x, pt.y);
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      socket.emit('stroke', { from: last, to: pt });
+      last = pt;
+    });
+    board.addEventListener('pointerup', () => drawing = false);
+    board.addEventListener('pointerleave', () => drawing = false);
+
+    clearBtn.onclick = () => { if (canDraw) clearCanvas(false); };
+    startBtn.onclick = () => socket.emit('startRound');
+
+    guessInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && canGuess) {
+        const text = guessInput.value.trim();
+        if (text) {
+          socket.emit('guess', text);
+          guessInput.value = '';
+        }
+      }
+    });
+
     socket.emit('joinRoom', 'default');
 
-    socket.on('joined', ({ symbol, board, turn }) => {
-      mySymbol = symbol;
-      symbolEl.textContent = symbol;
-      renderBoard(board);
-      updateTurn(turn);
+    socket.on('joined', ({ role, message, seconds }) => {
+      statusEl.textContent = message || '参加しました';
+      setRole(role);
+      if (seconds != null) setTimer(seconds);
     });
 
-    socket.on('startGame', ({ board, turn }) => {
-      renderBoard(board);
-      updateTurn(turn);
+    socket.on('stroke', seg => {
+      ctx.beginPath();
+      ctx.moveTo(seg.from.x, seg.from.y);
+      ctx.lineTo(seg.to.x, seg.to.y);
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#000';
+      ctx.stroke();
     });
 
-    socket.on('update', ({ board, turn }) => {
-      renderBoard(board);
-      updateTurn(turn);
+    socket.on('clear', () => clearCanvas(true));
+
+    socket.on('roundStarted', ({ role, hint, seconds }) => {
+      clearCanvas(true);
+      setRole(role);
+      hintEl.textContent = role === 'drawer' ? `お題：${hint}` : `ヒント：${'●'.repeat(hint.length)}（同じ長さ）`;
+      statusEl.textContent = 'ラウンド開始！';
+      setTimer(seconds);
+      log('新しいラウンドが始まりました');
     });
 
-    socket.on('gameOver', ({ result, board }) => {
-      renderBoard(board);
-      resultEl.textContent = result === 'draw' ? '引き分け！' : result + 'の勝利！';
-      boardEl.classList.add('disabled');
+    socket.on('tick', sec => setTimer(sec));
+
+    socket.on('chat', msg => log(msg));
+
+    socket.on('result', ({ type, answer, nextRole }) => {
+      if (type === 'correct') {
+        statusEl.textContent = `正解！答えは「${answer}」`;
+      } else if (type === 'timeout') {
+        statusEl.textContent = `時間切れ…答えは「${answer}」`;
+      }
+      setRole(nextRole);
+      hintEl.textContent = '';
+      clearInterval(timerTick);
+      timerEl.textContent = '--';
+    });
+
+    socket.on('roles', ({ role }) => {
+      setRole(role);
     });
 
     socket.on('opponentLeft', () => {
-      resultEl.textContent = '相手が退出しました。';
+      statusEl.textContent = '相手が退出しました（観戦または待機中）';
+      setRole(null);
     });
 
-    function renderBoard(board) {
-      boardEl.innerHTML = '';
-      board.forEach((cell, idx) => {
-        const div = document.createElement('div');
-        div.className = 'cell';
-        div.textContent = cell || '';
-        div.onclick = () => {
-          if (cell || resultEl.textContent || symbolEl.textContent !== turnEl.textContent) return;
-          socket.emit('makeMove', idx);
-        };
-        boardEl.appendChild(div);
-      });
-    }
-
-    function updateTurn(turn) {
-      turnEl.textContent = turn;
+    function setTimer(sec) {
+      timerRemain = sec;
+      timerEl.textContent = String(sec);
+      clearInterval(timerTick);
+      timerTick = setInterval(() => {
+        timerRemain--;
+        if (timerRemain < 0) { clearInterval(timerTick); return; }
+        timerEl.textContent = String(timerRemain);
+      }, 1000);
     }
   </script>
 </body>
 </html>
-
